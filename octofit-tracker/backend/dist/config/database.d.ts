@@ -1,4 +1,4 @@
 import mongoose from 'mongoose';
-declare const db: mongoose.Connection;
-export default db;
+export declare const connectDatabase: () => Promise<void>;
+export default mongoose;
 //# sourceMappingURL=database.d.ts.map

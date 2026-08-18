@@ -4,82 +4,126 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const database_1 = require("./config/database");
+const models_1 = require("./models");
 const app = (0, express_1.default)();
-const PORT = 8000;
-// Middleware
+const PORT = Number(process.env.PORT || 8000);
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
-// Environment-aware base URL for Codespaces
 const codespaceName = process.env.CODESPACE_NAME;
 const baseUrl = codespaceName
     ? `https://${codespaceName}-8000.app.github.dev`
     : 'http://localhost:8000';
-// Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
     res.json({
         status: 'ok',
         baseUrl,
         message: 'OctoFit Tracker API is running',
     });
 });
-// Users routes
-app.get('/api/users/', (req, res) => {
-    res.json({ message: 'Get all users', endpoint: '/api/users/' });
+app.get('/api/users/', async (_req, res) => {
+    const users = await models_1.User.find().lean();
+    res.json({ count: users.length, users });
 });
-app.post('/api/users/', (req, res) => {
-    res.json({ message: 'Create a new user', endpoint: '/api/users/' });
+app.post('/api/users/', async (req, res) => {
+    try {
+        const user = await models_1.User.create(req.body);
+        res.status(201).json({ message: 'User created', user });
+    }
+    catch (error) {
+        res.status(400).json({ message: 'Unable to create user', error });
+    }
 });
-app.get('/api/users/:id', (req, res) => {
-    res.json({ message: `Get user ${req.params.id}`, endpoint: '/api/users/:id' });
+app.get('/api/users/:id', async (req, res) => {
+    const user = await models_1.User.findById(req.params.id).lean();
+    if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+    }
+    return res.json({ user });
 });
-// Teams routes
-app.get('/api/teams/', (req, res) => {
-    res.json({ message: 'Get all teams', endpoint: '/api/teams/' });
+app.get('/api/teams/', async (_req, res) => {
+    const teams = await models_1.Team.find().populate('members').populate('leader').lean();
+    res.json({ count: teams.length, teams });
 });
-app.post('/api/teams/', (req, res) => {
-    res.json({ message: 'Create a new team', endpoint: '/api/teams/' });
+app.post('/api/teams/', async (req, res) => {
+    try {
+        const team = await models_1.Team.create(req.body);
+        res.status(201).json({ message: 'Team created', team });
+    }
+    catch (error) {
+        res.status(400).json({ message: 'Unable to create team', error });
+    }
 });
-app.get('/api/teams/:id', (req, res) => {
-    res.json({ message: `Get team ${req.params.id}`, endpoint: '/api/teams/:id' });
+app.get('/api/teams/:id', async (req, res) => {
+    const team = await models_1.Team.findById(req.params.id).populate('members').populate('leader').lean();
+    if (!team) {
+        return res.status(404).json({ message: 'Team not found' });
+    }
+    return res.json({ team });
 });
-// Activities routes
-app.get('/api/activities/', (req, res) => {
-    res.json({ message: 'Get all activities', endpoint: '/api/activities/' });
+app.get('/api/activities/', async (_req, res) => {
+    const activities = await models_1.Activity.find().populate('userId').lean();
+    res.json({ count: activities.length, activities });
 });
-app.post('/api/activities/', (req, res) => {
-    res.json({ message: 'Create a new activity', endpoint: '/api/activities/' });
+app.post('/api/activities/', async (req, res) => {
+    try {
+        const activity = await models_1.Activity.create(req.body);
+        res.status(201).json({ message: 'Activity created', activity });
+    }
+    catch (error) {
+        res.status(400).json({ message: 'Unable to create activity', error });
+    }
 });
-app.get('/api/activities/:id', (req, res) => {
-    res.json({ message: `Get activity ${req.params.id}`, endpoint: '/api/activities/:id' });
+app.get('/api/activities/:id', async (req, res) => {
+    const activity = await models_1.Activity.findById(req.params.id).populate('userId').lean();
+    if (!activity) {
+        return res.status(404).json({ message: 'Activity not found' });
+    }
+    return res.json({ activity });
 });
-// Leaderboard routes
-app.get('/api/leaderboard/', (req, res) => {
-    res.json({ message: 'Get leaderboard', endpoint: '/api/leaderboard/' });
+app.get('/api/leaderboard/', async (_req, res) => {
+    const leaderboard = await models_1.Leaderboard.find().populate('userId').populate('teamId').sort({ rank: 1 }).lean();
+    res.json({ count: leaderboard.length, leaderboard });
 });
-app.get('/api/leaderboard/:teamId', (req, res) => {
-    res.json({
-        message: `Get leaderboard for team ${req.params.teamId}`,
-        endpoint: '/api/leaderboard/:teamId',
-    });
+app.get('/api/leaderboard/:teamId', async (req, res) => {
+    const leaderboard = await models_1.Leaderboard.find({ teamId: req.params.teamId })
+        .populate('userId')
+        .populate('teamId')
+        .sort({ rank: 1 })
+        .lean();
+    res.json({ count: leaderboard.length, teamId: req.params.teamId, leaderboard });
 });
-// Workouts routes
-app.get('/api/workouts/', (req, res) => {
-    res.json({ message: 'Get all workout suggestions', endpoint: '/api/workouts/' });
+app.get('/api/workouts/', async (_req, res) => {
+    const workouts = await models_1.Workout.find().populate('userId').lean();
+    res.json({ count: workouts.length, workouts });
 });
-app.get('/api/workouts/:userId', (req, res) => {
-    res.json({
-        message: `Get personalized workouts for user ${req.params.userId}`,
-        endpoint: '/api/workouts/:userId',
-    });
+app.get('/api/workouts/:userId', async (req, res) => {
+    const workouts = await models_1.Workout.find({ userId: req.params.userId }).populate('userId').lean();
+    res.json({ count: workouts.length, userId: req.params.userId, workouts });
 });
-app.post('/api/workouts/', (req, res) => {
-    res.json({ message: 'Create a new workout suggestion', endpoint: '/api/workouts/' });
+app.post('/api/workouts/', async (req, res) => {
+    try {
+        const workout = await models_1.Workout.create(req.body);
+        res.status(201).json({ message: 'Workout created', workout });
+    }
+    catch (error) {
+        res.status(400).json({ message: 'Unable to create workout', error });
+    }
 });
-// Start server
-app.listen(PORT, () => {
-    console.log(`🏋️ OctoFit Tracker API running on port ${PORT}`);
-    console.log(`📍 Base URL: ${baseUrl}`);
-    console.log(`🔗 Health check: ${baseUrl}/health`);
-});
+const startServer = async () => {
+    try {
+        await (0, database_1.connectDatabase)();
+        app.listen(PORT, () => {
+            console.log(`🏋️ OctoFit Tracker API running on port ${PORT}`);
+            console.log(`📍 Base URL: ${baseUrl}`);
+            console.log(`🔗 Health check: ${baseUrl}/health`);
+        });
+    }
+    catch (error) {
+        console.error('Failed to start server:', error);
+        process.exit(1);
+    }
+};
+startServer();
 exports.default = app;
 //# sourceMappingURL=server.js.map

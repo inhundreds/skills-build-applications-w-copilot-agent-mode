@@ -1,21 +1,19 @@
-import express from 'express';
-import { Request, Response } from 'express';
+import express, { Request, Response } from 'express';
+import { connectDatabase } from './config/database';
+import { Activity, Leaderboard, Team, User, Workout } from './models';
 
 const app = express();
-const PORT = 8000;
+const PORT = Number(process.env.PORT || 8000);
 
-// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Environment-aware base URL for Codespaces
 const codespaceName = process.env.CODESPACE_NAME;
 const baseUrl = codespaceName
   ? `https://${codespaceName}-8000.app.github.dev`
   : 'http://localhost:8000';
 
-// Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     baseUrl,
@@ -23,78 +21,123 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// Users routes
-app.get('/api/users/', (req: Request, res: Response) => {
-  res.json({ message: 'Get all users', endpoint: '/api/users/' });
+app.get('/api/users/', async (_req: Request, res: Response) => {
+  const users = await User.find().lean();
+  res.json({ count: users.length, users });
 });
 
-app.post('/api/users/', (req: Request, res: Response) => {
-  res.json({ message: 'Create a new user', endpoint: '/api/users/' });
+app.post('/api/users/', async (req: Request, res: Response) => {
+  try {
+    const user = await User.create(req.body);
+    res.status(201).json({ message: 'User created', user });
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to create user', error });
+  }
 });
 
-app.get('/api/users/:id', (req: Request, res: Response) => {
-  res.json({ message: `Get user ${req.params.id}`, endpoint: '/api/users/:id' });
+app.get('/api/users/:id', async (req: Request, res: Response) => {
+  const user = await User.findById(req.params.id).lean();
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  return res.json({ user });
 });
 
-// Teams routes
-app.get('/api/teams/', (req: Request, res: Response) => {
-  res.json({ message: 'Get all teams', endpoint: '/api/teams/' });
+app.get('/api/teams/', async (_req: Request, res: Response) => {
+  const teams = await Team.find().populate('members').populate('leader').lean();
+  res.json({ count: teams.length, teams });
 });
 
-app.post('/api/teams/', (req: Request, res: Response) => {
-  res.json({ message: 'Create a new team', endpoint: '/api/teams/' });
+app.post('/api/teams/', async (req: Request, res: Response) => {
+  try {
+    const team = await Team.create(req.body);
+    res.status(201).json({ message: 'Team created', team });
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to create team', error });
+  }
 });
 
-app.get('/api/teams/:id', (req: Request, res: Response) => {
-  res.json({ message: `Get team ${req.params.id}`, endpoint: '/api/teams/:id' });
+app.get('/api/teams/:id', async (req: Request, res: Response) => {
+  const team = await Team.findById(req.params.id).populate('members').populate('leader').lean();
+  if (!team) {
+    return res.status(404).json({ message: 'Team not found' });
+  }
+
+  return res.json({ team });
 });
 
-// Activities routes
-app.get('/api/activities/', (req: Request, res: Response) => {
-  res.json({ message: 'Get all activities', endpoint: '/api/activities/' });
+app.get('/api/activities/', async (_req: Request, res: Response) => {
+  const activities = await Activity.find().populate('userId').lean();
+  res.json({ count: activities.length, activities });
 });
 
-app.post('/api/activities/', (req: Request, res: Response) => {
-  res.json({ message: 'Create a new activity', endpoint: '/api/activities/' });
+app.post('/api/activities/', async (req: Request, res: Response) => {
+  try {
+    const activity = await Activity.create(req.body);
+    res.status(201).json({ message: 'Activity created', activity });
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to create activity', error });
+  }
 });
 
-app.get('/api/activities/:id', (req: Request, res: Response) => {
-  res.json({ message: `Get activity ${req.params.id}`, endpoint: '/api/activities/:id' });
+app.get('/api/activities/:id', async (req: Request, res: Response) => {
+  const activity = await Activity.findById(req.params.id).populate('userId').lean();
+  if (!activity) {
+    return res.status(404).json({ message: 'Activity not found' });
+  }
+
+  return res.json({ activity });
 });
 
-// Leaderboard routes
-app.get('/api/leaderboard/', (req: Request, res: Response) => {
-  res.json({ message: 'Get leaderboard', endpoint: '/api/leaderboard/' });
+app.get('/api/leaderboard/', async (_req: Request, res: Response) => {
+  const leaderboard = await Leaderboard.find().populate('userId').populate('teamId').sort({ rank: 1 }).lean();
+  res.json({ count: leaderboard.length, leaderboard });
 });
 
-app.get('/api/leaderboard/:teamId', (req: Request, res: Response) => {
-  res.json({
-    message: `Get leaderboard for team ${req.params.teamId}`,
-    endpoint: '/api/leaderboard/:teamId',
-  });
+app.get('/api/leaderboard/:teamId', async (req: Request, res: Response) => {
+  const leaderboard = await Leaderboard.find({ teamId: req.params.teamId })
+    .populate('userId')
+    .populate('teamId')
+    .sort({ rank: 1 })
+    .lean();
+
+  res.json({ count: leaderboard.length, teamId: req.params.teamId, leaderboard });
 });
 
-// Workouts routes
-app.get('/api/workouts/', (req: Request, res: Response) => {
-  res.json({ message: 'Get all workout suggestions', endpoint: '/api/workouts/' });
+app.get('/api/workouts/', async (_req: Request, res: Response) => {
+  const workouts = await Workout.find().populate('userId').lean();
+  res.json({ count: workouts.length, workouts });
 });
 
-app.get('/api/workouts/:userId', (req: Request, res: Response) => {
-  res.json({
-    message: `Get personalized workouts for user ${req.params.userId}`,
-    endpoint: '/api/workouts/:userId',
-  });
+app.get('/api/workouts/:userId', async (req: Request, res: Response) => {
+  const workouts = await Workout.find({ userId: req.params.userId }).populate('userId').lean();
+  res.json({ count: workouts.length, userId: req.params.userId, workouts });
 });
 
-app.post('/api/workouts/', (req: Request, res: Response) => {
-  res.json({ message: 'Create a new workout suggestion', endpoint: '/api/workouts/' });
+app.post('/api/workouts/', async (req: Request, res: Response) => {
+  try {
+    const workout = await Workout.create(req.body);
+    res.status(201).json({ message: 'Workout created', workout });
+  } catch (error) {
+    res.status(400).json({ message: 'Unable to create workout', error });
+  }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🏋️ OctoFit Tracker API running on port ${PORT}`);
-  console.log(`📍 Base URL: ${baseUrl}`);
-  console.log(`🔗 Health check: ${baseUrl}/health`);
-});
+const startServer = async () => {
+  try {
+    await connectDatabase();
+    app.listen(PORT, () => {
+      console.log(`🏋️ OctoFit Tracker API running on port ${PORT}`);
+      console.log(`📍 Base URL: ${baseUrl}`);
+      console.log(`🔗 Health check: ${baseUrl}/health`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app;
